@@ -63,3 +63,18 @@ async function findLinks(url) {
 }
 
 const url = "https://reddit.com";
+
+async function navigate(nextUrl) {
+  try {
+    const next = getRandomLink(await findLinks(nextUrl));
+    if (!nextUrl.includes(url)) {
+      console.log("I've escaped!");
+    }
+    console.log(`${nextUrl}`);
+    navigate(next);
+  } catch (error) {
+    console.log(error);
+  }
+}
+
+navigate(url);
