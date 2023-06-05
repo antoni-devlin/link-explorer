@@ -1,39 +1,8 @@
 import * as cheerio from "cheerio";
 
-function isValidHttpUrl(string) {
-  let url;
-
-  try {
-    url = new URL(string);
-  } catch (_) {
-    return false;
-  }
-
-  return url.protocol === "http:" || url.protocol === "https:";
-}
-
 function getRandomLink(array) {
-  const filteredArray = array.filter(checkLinks);
-
-  function checkLinks(link) {
-    return !(
-      link.includes(".atom") ||
-      link.includes(".pdf") ||
-      link.includes(":") ||
-      link.includes("admin") ||
-      link.includes("/t/")
-    );
-  }
-  const randomLinkIndex = Math.floor(Math.random() * filteredArray.length);
-  let randomLink = filteredArray[randomLinkIndex];
-  if (!randomLink.includes(url) && !randomLink.includes("http")) {
-    randomLink = url + randomLink;
-  }
-  if (isValidHttpUrl(randomLink)) {
-    return randomLink;
-  } else {
-    getRandomLink(array);
-  }
+  const randomLinkIndex = Math.floor(Math.random() * array.length);
+  return array[randomLinkIndex].toString();
 }
 
 async function findLinks(url) {
@@ -45,34 +14,59 @@ async function findLinks(url) {
 
     const $ = cheerio.load(html);
 
-    const links = $("a");
+    const links = $("a").toArray();
 
-    const linkArray = [];
+    const linkArray = links
+      .map((value) => {
+        return value.attribs["href"];
+      })
+      .filter((value) => value !== undefined)
+      .map((value) => {
+        return new URL(value, url);
+      })
+      .filter((link) => {
+        if (process.env.SKIP_CURRENT_PAGE) {
+          return link.toString() !== url.toString();
+        }
+        return true;
+      })
+      .filter((link) => link.protocol === "http:" || link.protocol === "https:")
+      .filter((link) => {
+        return !(
+          link.pathname.endsWith(".atom") ||
+          link.pathname.endsWith(".pdf") ||
+          link.pathname.includes("admin") ||
+          link.pathname.includes("/t/")
+        );
+      })
+      .filter((link) => link.hostname !== new URL(url).hostname)
+      .filter((link) => !link.hostname.includes("reddit"));
 
-    links.each((index, value) => {
-      // Print the text from the tags and the associated href
-      const href = $(value).attr("href");
-      if (href) {
-        linkArray.push(String(href));
-      }
-    });
     return linkArray;
   } catch (error) {
     console.log(error);
+    return [];
   }
 }
 
-const url = "https://reddit.com";
+const url = "https://www.reddit.com";
+const baseHostname = new URL(url).hostname;
 
 async function navigate(nextUrl) {
   try {
-    const next = getRandomLink(await findLinks(nextUrl));
+    const links = await findLinks(nextUrl);
+    if (links.length === 0) {
+      console.log("We've hit a dead end");
+      process.exit();
+    }
+    const next = getRandomLink(links);
     if (!nextUrl.includes(url)) {
       console.log("I've escaped!");
     }
     console.log(`${nextUrl}`);
     navigate(next);
   } catch (error) {
+    console.log(`${nextUrl}`);
     console.log(error);
   }
 }
